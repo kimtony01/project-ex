@@ -7,38 +7,37 @@ import seaborn as sns
 import platform
 import os
 
-# 1. 한글 폰트 설정
-def setup_korean_font():
-    local_fonts = [f for f in os.listdir('.') if f.endswith(('.ttf', '.otf'))]
-    applied = False
-    for font_path in local_fonts:
-        try:
-            prop = fm.FontProperties(fname=font_path)
-            if "roboto" not in font_path.lower():
-                font_name = prop.get_name()
-                plt.rc('font', family=font_name)
-                applied = True
-                break
-        except Exception:
-            continue
-            
-    if not applied:
-        system_name = platform.system()
-        if system_name == 'Windows':
-            plt.rc('font', family='Malgun Gothic')
-        elif system_name == 'Darwin':
-            plt.rc('font', family='AppleGothic')
-        else:
-            plt.rc('font', family='NanumGothic')
-
+# 1. 한글 폰트 강제 설정 (Windows/Mac/Linux 완벽 대응)
+def apply_korean_font():
     plt.rcParams['axes.unicode_minus'] = False
+    
+    # 1) Windows 시스템 맑은 고딕 직접 등록
+    if platform.system() == 'Windows':
+        win_font_paths = [
+            "C:/Windows/Fonts/malgun.ttf",
+            "C:/Windows/Fonts/malgunbd.ttf",
+            "C:/Windows/Fonts/gulim.ttc"
+        ]
+        for path in win_font_paths:
+            if os.path.exists(path):
+                fm.fontManager.addfont(path)
+                prop = fm.FontProperties(fname=path)
+                plt.rcParams['font.family'] = prop.get_name()
+                return
+        plt.rcParams['font.family'] = 'Malgun Gothic'
+    # 2) Mac 애플고딕
+    elif platform.system() == 'Darwin':
+        plt.rcParams['font.family'] = 'AppleGothic'
+    # 3) Linux 나눔고딕
+    else:
+        plt.rcParams['font.family'] = 'NanumGothic'
 
-setup_korean_font()
+apply_korean_font()
 
 # 2. 페이지 설정
 st.set_page_config(page_title="무역 분석 대시보드", layout="wide")
 
-# 3. 데이터 로드 및 교역 파트너국(j) 기준 매핑
+# 3. 데이터 로드 및 상대국(j) 기준 매핑
 @st.cache_data
 def load_data():
     baci_df = pd.read_csv('baci_85_sample.csv')
@@ -47,7 +46,6 @@ def load_data():
     baci_df.columns = baci_df.columns.str.strip()
     country_df.columns = country_df.columns.str.strip()
     
-    # country_codes 파일의 코드 및 국가명 컬럼 자동 감지
     code_col = country_df.columns[0]
     name_col = country_df.columns[1] if len(country_df.columns) > 1 else country_df.columns[0]
     
@@ -57,7 +55,6 @@ def load_data():
         if col.lower() in ['country_name', 'name', 'country', 'country_name_full', 'country_name_abbreviation']:
             name_col = col
 
-    # 수입국/상대국(j) 기준 매핑 (수출국 i가 410 대한민국 단일값인 경우 대응)
     baci_df['target_code'] = baci_df['j'].astype(str)
     country_df['clean_code'] = country_df[code_col].astype(str)
     
@@ -69,7 +66,6 @@ def load_data():
         how='left'
     )
     
-    # 국가명 부여
     merged_df['country_name'] = merged_df[name_col].fillna(merged_df['target_code'])
     
     # 무역액 등급 (대, 중, 소) 분할
@@ -106,7 +102,7 @@ filtered_df = df[
     (df['무역액등급'].isin(selected_grades))
 ]
 
-# 5. 메인 화면 구성
+# 5. 메인 화면 출력
 # 1. 타이틀
 st.title("무역 분석 대시보드")
 
@@ -175,3 +171,4 @@ if not filtered_df.empty:
         st.dataframe(norm_table.style.format("{:.2%}"), use_container_width=True)
 else:
     st.write("선택된 데이터가 없습니다.")
+    
