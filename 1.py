@@ -4,28 +4,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import seaborn as sns
-import platform
 import os
 
-# 1. 한글 폰트 완벽 고정 설정
+# 1. 한글 폰트 완벽 고정 설정 (OS 무관, 폰트 파일 직접 등록 방식)
 def setup_korean_font():
     plt.rcParams['axes.unicode_minus'] = False
-    
-    # OS별 한글 폰트 지정
-    if platform.system() == 'Windows':
-        font_name = 'Malgun Gothic'
-        win_font_path = "C:/Windows/Fonts/malgun.ttf"
-        if os.path.exists(win_font_path):
-            fm.fontManager.addfont(win_font_path)
-    elif platform.system() == 'Darwin':
-        font_name = 'AppleGothic'
-    else:
-        font_name = 'NanumGothic'
 
-    # Matplotlib 및 Seaborn 기본 폰트 강제 고정
-    plt.rc('font', family=font_name)
-    plt.rcParams['font.family'] = font_name
-    plt.rcParams['font.sans-serif'] = [font_name, 'Malgun Gothic', 'AppleGothic', 'NanumGothic', 'Gulim']
+    # 프로젝트 폴더 기준 상대경로 - fonts 폴더에 NanumGothic.otf를 넣어주세요
+    font_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "NanumGothic.otf")
+
+    if os.path.exists(font_path):
+        fm.fontManager.addfont(font_path)
+        font_name = fm.FontProperties(fname=font_path).get_name()
+        plt.rc('font', family=font_name)
+        plt.rcParams['font.family'] = font_name
+    else:
+        # 폰트 파일을 못 찾은 경우 (경고용, 이 경우 글자 깨짐 발생 가능)
+        st.warning(f"⚠️ 폰트 파일을 찾을 수 없습니다: {font_path}")
+        plt.rc('font', family='sans-serif')
 
 setup_korean_font()
 
@@ -119,7 +115,6 @@ col_left, col_right = st.columns(2)
 with col_left:
     st.subheader("국가*연도 수출액 히트맵(상위 8개국)")
     if not filtered_df.empty:
-        setup_korean_font()
         top_8_countries = filtered_df.groupby('country_name')['v'].sum().nlargest(8).index
         heatmap_filtered = filtered_df[filtered_df['country_name'].isin(top_8_countries)]
         pivot_data = heatmap_filtered.pivot_table(index='country_name', columns='t', values='v', aggfunc='sum', fill_value=0)
@@ -135,7 +130,6 @@ with col_left:
 with col_right:
     st.subheader("무역액 등급분포")
     if not filtered_df.empty:
-        setup_korean_font()
         grade_dist = filtered_df['무역액등급'].value_counts().reindex(['대', '중', '소'])
         fig2, ax2 = plt.subplots(figsize=(7, 4.5))
         sns.barplot(x=grade_dist.index, y=grade_dist.values, palette="Blues_r", ax=ax2)
