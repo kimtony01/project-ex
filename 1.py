@@ -6,21 +6,37 @@ import matplotlib.font_manager as fm
 import seaborn as sns
 import os
 
-# 1. 한글 폰트 완벽 고정 설정 (OS 무관, 폰트 파일 직접 등록 방식)
+# 1. 한글 폰트 완벽 고정 설정 (시스템 폰트 우선 탐색 -> 로컬 파일 백업)
 def setup_korean_font():
     plt.rcParams['axes.unicode_minus'] = False
 
-    # 프로젝트 폴더 기준 상대경로 - fonts 폴더에 NanumGothic.otf를 넣어주세요
-    font_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "NanumGothic.otf")
+    font_path = None
 
-    if os.path.exists(font_path):
+    # 방법 1: 시스템에 설치된 나눔고딕류 폰트 탐색 (packages.txt로 설치했을 경우)
+    system_fonts = [f for f in fm.findSystemFonts() if 'Nanum' in f or 'nanum' in f]
+    if system_fonts:
+        font_path = system_fonts[0]
+
+    # 방법 2: 프로젝트 폴더 안 로컬 폰트 파일 탐색 (여러 위치 후보)
+    if font_path is None:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        candidates = [
+            os.path.join(base_dir, "fonts", "NanumGothic.otf"),
+            os.path.join(base_dir, "NanumGothic.otf"),
+            os.path.join(base_dir, "fonts", "NanumGothic.ttf"),
+        ]
+        for c in candidates:
+            if os.path.exists(c):
+                font_path = c
+                break
+
+    if font_path:
         fm.fontManager.addfont(font_path)
         font_name = fm.FontProperties(fname=font_path).get_name()
         plt.rc('font', family=font_name)
         plt.rcParams['font.family'] = font_name
     else:
-        # 폰트 파일을 못 찾은 경우 (경고용, 이 경우 글자 깨짐 발생 가능)
-        st.warning(f"⚠️ 폰트 파일을 찾을 수 없습니다: {font_path}")
+        st.warning("⚠️ 한글 폰트를 찾을 수 없습니다. packages.txt에 fonts-nanum을 추가하거나 fonts/NanumGothic.otf 파일을 리포지토리에 커밋해주세요.")
         plt.rc('font', family='sans-serif')
 
 setup_korean_font()
