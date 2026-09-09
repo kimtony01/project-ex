@@ -38,80 +38,55 @@ setup_korean_font()
 # 2. 페이지 설정
 st.set_page_config(page_title="무역 분석 대시보드", layout="wide")
 
-# 3. 데이터 로드 및 국가명 매핑
-ISO_NUMERIC_TO_NAME = {
-    410: "대한민국 (Korea)",
-    842: "미국 (USA)",
-    156: "중국 (China)",
-    392: "일본 (Japan)",
-    276: "독일 (Germany)",
-    704: "베트남 (Vietnam)",
-    344: "홍콩 (Hong Kong)",
-    158: "대만 (Taiwan)",
-    702: "싱가포르 (Singapore)",
-    458: "말레이시아 (Malaysia)",
-    360: "인도네시아 (Indonesia)",
-    764: "태국 (Thailand)",
-    699: "인도 (India)",
-    356: "인도 (India)",
-    251: "프랑스 (France)",
-    826: "영국 (UK)",
-    381: "이탈리아 (Italy)",
-    528: "네덜란드 (Netherlands)",
-    757: "스위스 (Switzerland)",
-    36: "호주 (Australia)",
-    124: "캐나다 (Canada)",
-    484: "멕시코 (Mexico)",
-    76: "브라질 (Brazil)",
-    643: "러시아 (Russia)"
-}
-
+# 3. 데이터 로드 및 교역 파트너국(j) 기준 매핑
 @st.cache_data
 def load_data():
     baci_df = pd.read_csv('baci_85_sample.csv')
+    country_df = pd.read_csv('country_codes_sample.csv')
+    
     baci_df.columns = baci_df.columns.str.strip()
+    country_df.columns = country_df.columns.str.strip()
     
-    country_map = {}
-    if os.path.exists('country_codes_sample.csv'):
-        country_df = pd.read_csv('country_codes_sample.csv')
-        country_df.columns = country_df.columns.str.strip()
-        
-        code_col = country_df.columns[0]
-        name_col = country_df.columns[1] if len(country_df.columns) > 1 else country_df.columns[0]
-        
-        for _, row in country_df.iterrows():
-            try:
-                c_code = int(float(row[code_col]))
-                c_name = str(row[name_col]).strip()
-                country_map[c_code] = c_name
-            except Exception:
-                continue
-
-    for k, v in ISO_NUMERIC_TO_NAME.items():
-        if k not in country_map:
-            country_map[k] = v
-
-    baci_df['i_clean'] = pd.to_numeric(baci_df['i'], errors='coerce')
-    baci_df['country_name'] = baci_df['i_clean'].map(country_map)
+    # country_codes 파일의 코드 및 국가명 컬럼 자동 감지
+    code_col = country_df.columns[0]
+    name_col = country_df.columns[1] if len(country_df.columns) > 1 else country_df.columns[0]
     
-    baci_df['country_name'] = baci_df['country_name'].fillna(
-        baci_df['i_clean'].apply(lambda x: f"국가코드 {int(x)}" if pd.notnull(x) else "기타")
+    for col in country_df.columns:
+        if col.lower() in ['country_code', 'code', 'id', 'i', 'j', 'country_code_numeric']:
+            code_col = col
+        if col.lower() in ['country_name', 'name', 'country', 'country_name_full', 'country_name_abbreviation']:
+            name_col = col
+
+    # 수입국/상대국(j) 기준 매핑 (수출국 i가 410 대한민국 단일값인 경우 대응)
+    baci_df['target_code'] = baci_df['j'].astype(str)
+    country_df['clean_code'] = country_df[code_col].astype(str)
+    
+    merged_df = pd.merge(
+        baci_df, 
+        country_df[['clean_code', name_col]], 
+        left_on='target_code', 
+        right_on='clean_code', 
+        how='left'
     )
     
-    baci_df['무역액등급'] = pd.qcut(
-        baci_df['v'], 
+    # 국가명 부여
+    merged_df['country_name'] = merged_df[name_col].fillna(merged_df['target_code'])
+    
+    # 무역액 등급 (대, 중, 소) 분할
+    merged_df['무역액등급'] = pd.qcut(
+        merged_df['v'], 
         q=3, 
         labels=['소', '중', '대']
     )
     
-    return baci_df
+    return baci_df, merged_df
 
-df = load_data()
+baci_raw, df = load_data()
 
 # 4. 사이드바 필터
 st.sidebar.header("필터 설정")
 
-all_countries = sorted(df['country_name'].unique().tolist())
+all_countries = sorted(df['country_name'].dropna().unique().tolist())
 
 selected_countries = st.sidebar.multiselect(
     "국가 선택", 
@@ -131,13 +106,13 @@ filtered_df = df[
     (df['무역액등급'].isin(selected_grades))
 ]
 
-# 5. 오른쪽 메인 화면 출력
+# 5. 메인 화면 구성
 # 1. 타이틀
 st.title("무역 분석 대시보드")
 
 # 2. baci_85_sample.csv 파일의 결측치
 st.subheader("baci_85_sample.csv 파일의 결측치")
-missing_df = df.isnull().sum().reset_index()
+missing_df = baci_raw.isnull().sum().reset_index()
 missing_df.columns = ['컬럼명', '결측치 수']
 st.dataframe(missing_df, use_container_width=True)
 
@@ -180,7 +155,7 @@ with col_right:
 
 st.markdown("---")
 
-# 5. 상위 5개국 * 무역액 등급 교차표
+# 5. 상위 5개국 * 무역액 등급 교차표 (원본건수 / 정규화비율)
 st.subheader("상위 5개국 * 무역액 등급 교차표")
 
 if not filtered_df.empty:
